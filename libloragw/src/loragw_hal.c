@@ -37,15 +37,17 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include "loragw_hal.h"
 #include "loragw_aux.h"
 #include "loragw_com.h"
-#include "loragw_i2c.h"
 #include "loragw_lbt.h"
 #include "loragw_sx1250.h"
 #include "loragw_sx125x.h"
 #include "loragw_sx1261.h"
 #include "loragw_sx1302.h"
 #include "loragw_sx1302_timestamp.h"
+#ifdef USE_I2C_DEVICE
+#include "loragw_i2c.h"
 #include "loragw_stts751.h"
 #include "loragw_ad5338r.h"
+#endif
 #include "loragw_debug.h"
 
 /* -------------------------------------------------------------------------- */
@@ -202,13 +204,14 @@ static lgw_context_t lgw_context = {
 /* File handle to write debug logs */
 FILE * log_file = NULL;
 
+#ifdef USE_I2C_DEVICE
 /* I2C temperature sensor handles */
 static int     ts_fd = -1;
 static uint8_t ts_addr = 0xFF;
 
 /* I2C AD5338 handles */
 static int     ad_fd = -1;
-
+#endif
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS DECLARATION ---------------------------------------- */
 
@@ -1092,6 +1095,7 @@ int lgw_start(void) {
     /* Configure the pseudo-random generator (For Debug) */
     dbg_init_random();
 
+#ifdef USE_I2C_DEVICE
     if (CONTEXT_COM_TYPE == LGW_COM_SPI) {
         /* Find the temperature sensor on the known supported ports */
         for (i = 0; i < (int)(sizeof I2C_PORT_TEMP_SENSOR); i++) {
@@ -1115,8 +1119,7 @@ int lgw_start(void) {
         if (i == sizeof I2C_PORT_TEMP_SENSOR) {
             printf("ERROR: no temperature sensor found.\n");
             return LGW_HAL_ERROR;
-        }
-
+        }   
         /* Configure ADC AD338R for full duplex (CN490 reference design) */
         if (CONTEXT_BOARD.full_duplex == true) {
             err = i2c_linuxdev_open(I2C_DEVICE, I2C_PORT_DAC_AD5338R, &ad_fd);
@@ -1143,6 +1146,7 @@ int lgw_start(void) {
             printf("INFO: AD5338R: Set DAC output to 0x%02X 0x%02X\n", (uint8_t)VOLTAGE2HEX_H(0), (uint8_t)VOLTAGE2HEX_L(0));
         }
     }
+#endif        
 
     /* Connect to the external sx1261 for LBT or Spectral Scan */
     if (CONTEXT_SX1261.enable == true) {
@@ -1220,7 +1224,7 @@ int lgw_stop(void) {
         printf("ERROR: failed to disconnect concentrator\n");
         err = LGW_HAL_ERROR;
     }
-
+#ifdef USE_I2C_DEVICE
     if (CONTEXT_COM_TYPE == LGW_COM_SPI) {
         DEBUG_MSG("INFO: Closing I2C for temperature sensor\n");
         x = i2c_linuxdev_close(ts_fd);
@@ -1238,7 +1242,7 @@ int lgw_stop(void) {
             }
         }
     }
-
+#endif
     CONTEXT_STARTED = false;
 
     DEBUG_PRINTF(" --- %s\n", "OUT");
@@ -1285,14 +1289,14 @@ int lgw_receive(uint8_t max_pkt, struct lgw_pkt_rx_s *pkt_data) {
         nb_pkt_left = nb_pkt_fetched - max_pkt;
         printf("WARNING: not enough space allocated, fetched %d packet(s), %d will be left in RX buffer\n", nb_pkt_fetched, nb_pkt_left);
     }
-
+#ifdef USE_I2C_DEVICE
     /* Apply RSSI temperature compensation */
     res = lgw_get_temperature(&current_temperature);
     if (res != LGW_I2C_SUCCESS) {
         printf("ERROR: failed to get current temperature\n");
         return LGW_HAL_ERROR;
     }
-
+#endif
     /* Iterate on the RX buffer to get parsed packets */
     for (nb_pkt_found = 0; nb_pkt_found < ((nb_pkt_fetched <= max_pkt) ? nb_pkt_fetched : max_pkt); nb_pkt_found++) {
         /* Get packet and move to next one */
@@ -1410,7 +1414,7 @@ int lgw_send(struct lgw_pkt_tx_s * pkt_data) {
         printf("ERROR: INVALID TX MODULATION\n");
         return LGW_HAL_ERROR;
     }
-
+#ifdef USE_I2C_DEVICE
     /* Set PA gain with AD5338R when using full duplex CN490 ref design */
     if (CONTEXT_BOARD.full_duplex == true) {
         uint8_t volt_val[AD5338R_CMD_SIZE] = {0x39, VOLTAGE2HEX_H(2.51), VOLTAGE2HEX_L(2.51)}; /* set to 2.51V */
@@ -1421,7 +1425,7 @@ int lgw_send(struct lgw_pkt_tx_s * pkt_data) {
         }
         printf("INFO: AD5338R: Set DAC output to 0x%02X 0x%02X\n", (uint8_t)VOLTAGE2HEX_H(2.51), (uint8_t)VOLTAGE2HEX_L(2.51));
     }
-
+#endif
     /* Start Listen-Before-Talk */
     if (CONTEXT_SX1261.lbt_conf.enable == true) {
         err = lgw_lbt_start(&CONTEXT_SX1261, pkt_data);
@@ -1587,7 +1591,7 @@ int lgw_get_eui(uint64_t* eui) {
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
+#ifdef USE_I2C_DEVICE
 int lgw_get_temperature(float* temperature) {
     int err = LGW_HAL_ERROR;
 
@@ -1611,6 +1615,7 @@ int lgw_get_temperature(float* temperature) {
 
     return err;
 }
+#endif
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 

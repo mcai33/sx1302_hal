@@ -1481,7 +1481,7 @@ int main(int argc, char ** argv)
     uint32_t trig_tstamp;
     uint32_t inst_tstamp;
     uint64_t eui;
-    float temperature;
+    float temperature = 25;
 
     /* statistics variable */
     time_t t;
@@ -1871,6 +1871,7 @@ int main(int argc, char ** argv)
         } else {
             printf("# GPS sync is disabled\n");
         }
+#ifdef USE_I2C_DEVICE        
         pthread_mutex_lock(&mx_concent);
         i = lgw_get_temperature(&temperature);
         pthread_mutex_unlock(&mx_concent);
@@ -1880,6 +1881,7 @@ int main(int argc, char ** argv)
             printf("### Concentrator temperature: %.0f C ###\n", temperature);
         }
         printf("##### END #####\n");
+#endif        
 
         /* generate a JSON report (will be sent to server by upstream thread) */
         pthread_mutex_lock(&mx_stat_rep);

@@ -1,0 +1,1 @@
+../tools/reset_lgw.sh
